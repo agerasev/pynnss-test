@@ -1,0 +1,4 @@
+.fuse_hidden*
+*.sublime*
+*.pyc
+__pycache__
