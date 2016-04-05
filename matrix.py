@@ -21,6 +21,7 @@ with Case('Matrix._State._Gradient'):
 
 with Case('Matrix._State._Rate'):
 	rate = st.newRate(1e-2)
+	adagrad = st.newRate(1e-2, adagrad=True)
 
 with Case('Matrix._Memory'):
 	mem = m.newMemory()
@@ -54,4 +55,6 @@ with Case('Matrix.backprop'):
 
 with Case('Matrix._State.learn'):
 	st.learn(grad, rate)
-	assert(np.sum((st.data.get() - (w - rate.data*grad.data.get()))**2) < 1e-8)
+	assert(np.sum((st.data.get() - (w - rate.factor*grad.data.get()))**2) < 1e-8)
+	adagrad.update(grad.data)
+	st.learn(grad, adagrad)
