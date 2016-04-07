@@ -2,9 +2,8 @@
 
 import numpy as np
 from pynn import Matrix
-import pynn.array as arr
+import pynn.array as array
 from testutil import Case
-
 
 with Case('Matrix'):
 	m = Matrix(3, 2)
@@ -12,33 +11,30 @@ with Case('Matrix'):
 	assert(m.isize == 3 and m.osize == 2)
 
 with Case('Matrix._State'):
-	st = m.newState()
+	factory = array.newFactory()
+	st = m.newState(factory)
 	w = np.array([1, 2, 3, 4, 5, 6]).reshape(2, 3)
 	st.data.set(w)
 
 with Case('Matrix._State._Gradient'):
-	grad = st.newGradient()
+	grad = st.newGradient(factory)
 
 with Case('Matrix._State._Rate'):
-	rate = st.newRate(1e-2)
-	adagrad = st.newRate(1e-2, adagrad=True)
+	rate = st.newRate(factory, 1e-2)
+	adagrad = st.newRate(factory, 1e-2, adagrad=True)
 
-with Case('Matrix._Memory'):
-	mem = m.newMemory()
-
-with Case('Matrix._Error'):
-	err = m.newError()
+with Case('Matrix._Trace'):
+	tr = m.newTrace(factory)
 
 with Case('Matrix._Context'):
-	src, dst = arr.Array(m.isize), arr.Array(m.osize)
+	src, dst = factory.empty(m.isize), factory.empty(m.osize)
 	comp = {
 		'state': st,
-		'mem': mem,
+		'trace': tr,
 		'grad': grad,
-		'err': err,
 		'rate': rate
 	}
-	ctx = m.newContext(src, dst, **comp)
+	ctx = m.newContext(factory, src, dst, **comp)
 
 with Case('Matrix.transmit'):
 	inp = np.array([1, 2, 3])
