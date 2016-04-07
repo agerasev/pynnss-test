@@ -28,13 +28,13 @@ with Case('Matrix._Trace'):
 
 with Case('Matrix._Context'):
 	src, dst = factory.empty(m.isize), factory.empty(m.osize)
-	comp = {
-		'state': st,
-		'trace': tr,
-		'grad': grad,
-		'rate': rate
-	}
-	ctx = m.newContext(factory, src, dst, **comp)
+	ctx = m.newContext(factory)
+	ctx.state = st
+	ctx.trace = tr
+	ctx.grad = grad
+	ctx.rate = rate
+	ctx.src = src
+	ctx.dst = dst
 
 with Case('Matrix.transmit'):
 	inp = np.array([1, 2, 3])
