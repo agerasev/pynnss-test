@@ -106,7 +106,7 @@ net.link(nn.Path((5, 0), (6, 0)))
 net.link(nn.Path((6, 0), (7, 0)))
 net.link(nn.Path((7, 0), (-1, 0)))
 
-rate = nn.Rate(net, rate_factor)
+rate = nn.RateAdaGrad(net, rate_factor)
 
 b = 0
 p = 0
@@ -124,6 +124,9 @@ def signal_handler(signal, frame):
 
 signal.signal(signal.SIGINT, signal_handler)
 
+lprof = nn.Node.Profiler()
+
+counter = 0
 show_period = 20
 while not done:
 	if p >= len(words):
@@ -134,9 +137,35 @@ while not done:
 		pass  # shuffle(words)
 
 	(grad, loss) = do_batch(net, p, batch_size)
-	grad.clip(5e0)
-	# rate.update(grad)
-	net.learn(grad, rate)
+	with lprof:
+		grad.clip(5e0)
+		rate.update(grad)
+		net.learn(grad, rate)
+
+	counter += 1
+	if counter == 20:
+		print('fnet: %f' % (1e3*net.fprof.time))
+		tac = 0.
+		for n in net.nodes.values():
+			tac += n.fprof.time
+		print(' fnodes: %f' % (1e3*tac))
+
+		print('bnet: %f' % (1e3*net.bprof.time))
+		tac = 0.
+		for n in net.nodes.values():
+			tac += n.bprof.time
+		print(' bnodes: %f' % (1e3*tac))
+
+		print('learn: %f' % (1e3*lprof.time))
+
+		np.savez('state/wordgen_batch_20_adagrad.npz', **{
+			'Wxh': net.nodes[0].state,
+			'Whh': net.nodes[1].state,
+			'bh': net.nodes[3].state,
+			'Why': net.nodes[6].state,
+			'by': net.nodes[7].state
+		})
+		exit()
 
 	smooth_loss = 0.9*smooth_loss + 0.1*loss
 

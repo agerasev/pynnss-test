@@ -13,7 +13,7 @@ with Case('Matrix'):
 with Case('Matrix._State'):
 	factory = array.newFactory()
 	st = m.newState(factory)
-	w = np.array([1, 2, 3, 4, 5, 6]).reshape(2, 3)
+	w = np.array([1, 2, 3, 4, 5, 6]).reshape(2, 3).T
 	st.data.set(w)
 
 with Case('Matrix._State._Gradient'):
@@ -40,17 +40,17 @@ with Case('Matrix.transmit'):
 	inp = np.array([1, 2, 3])
 	src.set(inp)
 	m.transmit(ctx)
-	assert(np.sum((dst.get() - np.dot(w, inp))**2) < 1e-8)
+	assert(np.sum((dst.get() - np.dot(inp, w))**2) < 1e-8)
 
 with Case('Matrix.backprop'):
 	outp = np.array([1, 2])
 	dst.set(outp)
 	m.backprop(ctx)
-	assert(np.sum((src.get() - np.dot(outp, w))**2) < 1e-8)
-	assert(np.sum((grad.data.get() - np.outer(outp, inp))**2) < 1e-8)
+	assert(np.sum((src.get() - np.dot(w, outp))**2) < 1e-8)
+	assert(np.sum((grad.data.get() - np.outer(inp, outp))**2) < 1e-8)
 
 with Case('Matrix._State.learn'):
 	st.learn(grad, rate)
 	assert(np.sum((st.data.get() - (w - rate.factor*grad.data.get()))**2) < 1e-8)
-	adagrad.update(grad.data)
+	adagrad.update(grad)
 	st.learn(grad, adagrad)

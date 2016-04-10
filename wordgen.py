@@ -85,17 +85,19 @@ shid = 200
 batch_size = 20
 rate_factor = 1e-1
 
-net = nn.Network(size, size)
+opt = {'prof': True}
+
+net = nn.Network(size, size, **opt)
 
 net.addnodes([
-	nn.Matrix(size, shid),
-	nn.Matrix(shid, shid),
-	nn.Join(shid),
-	nn.Bias(shid),
-	nn.Tanh(shid),
-	nn.Fork(shid),
-	nn.Matrix(shid, size),
-	nn.Bias(size)
+	nn.Matrix(size, shid, **opt),
+	nn.Matrix(shid, shid, **opt),
+	nn.Join(shid, **opt),
+	nn.Bias(shid, **opt),
+	nn.Tanh(shid, **opt),
+	nn.Fork(shid, **opt),
+	nn.Matrix(shid, size, **opt),
+	nn.Bias(size, **opt)
 ])
 
 net.connect([
@@ -119,16 +121,22 @@ net.setoutputs(7)
 context = net.newContext(factory)
 context.state = state = net.newState(factory)
 
+nmap = {
+	'Wxh': 0,
+	'Whh': 1,
+	'bh': 3,
+	'Why': 6,
+	'by': 7
+}
+
 save = np.load('state/wordgen.npz')
-state.nodes[0].data.set(save['Wxh'])
-state.nodes[1].data.set(save['Whh'])
-state.nodes[3].data.set(save['bh'])
-state.nodes[6].data.set(save['Why'])
-state.nodes[7].data.set(save['by'])
+
+for key in save:
+	state.nodes[nmap[key]].data.set(save[key])
 
 context.trace = net.newTrace(factory)
 context.grad = state.newGradient(factory)
-context.rate = state.newRate(factory, rate_factor)
+context.rate = state.newRate(factory, rate_factor, adagrad=True)
 context.mem = state.newMemory(factory)
 context.err = state.newError(factory)
 
@@ -147,6 +155,9 @@ def signal_handler(signal, frame):
 	done = True
 signal.signal(signal.SIGINT, signal_handler)
 
+lstat = nn.Profiler()
+
+counter = 0
 show_period = 20
 while not done:
 	if p >= len(words):
@@ -158,9 +169,37 @@ while not done:
 		pass
 
 	loss = do_batch(net, context, p, batch_size)
-	context.grad.clip(5e0)
-	# context.rate.update(context.grad)
-	context.state.learn(context.grad, context.rate)
+	with lstat:
+		context.grad.clip(5e0)
+		context.rate.update(context.grad)
+		context.state.learn(context.grad, context.rate)
+
+	counter += 1
+	if counter == 20:
+		save = np.load('state/wordgen_batch_20_adagrad.npz')
+		for key in save:
+			print(np.sum((state.nodes[nmap[key]].data.get() - save[key])**2))
+
+		print('fnet: %f' % (1e3*net.fstat.time))
+		tac = 0.
+		for n in net.nodes:
+			tac += n.fstat.time
+		print(' fnodes: %f ms' % (1e3*tac))
+
+		print('bnet: %f ms' % (1e3*net.bstat.time))
+		tac = 0.
+		for n in net.nodes:
+			tac += n.bstat.time
+		print(' bnodes: %f ms' % (1e3*tac))
+
+		print('learn: %f ms' % (1e3*lstat.time))
+
+		stats = nn.array.stats
+		times = [v.time for v in stats.values()]
+		for v, k in reversed(sorted(zip(times, stats.keys()))):
+			print('%f ms: %s' % (1e3*v, k))
+
+		exit()
 
 	smooth_loss = 0.9*smooth_loss + 0.1*loss
 
