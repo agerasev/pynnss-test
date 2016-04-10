@@ -11,6 +11,8 @@ words = []
 for word in data.split('\n'):
 	words.append(word + '\n')
 
+max_depth = max([len(w) for w in words])
+
 chars = sorted(list(set(data)))
 ci = {c: i for i, c in enumerate(chars)}
 ic = {i: c for i, c in enumerate(chars)}
@@ -20,8 +22,6 @@ size = len(chars)
 # print(chars)
 
 factory = nn.array.newFactory()
-
-max_depth = 64
 
 
 def do_batch(net, ctx, pos, batch_size):
@@ -36,13 +36,12 @@ def do_batch(net, ctx, pos, batch_size):
 	imem = ctx.state.newMemory(factory)
 	ierr = ctx.state.newError(factory)
 	trace_stack = [net.newTrace(factory) for i in range(max_depth)]
-	out_stack = [factory.empty(size) for i in range(max_depth)]
 
 	for i in range(min(batch_size, len(words) - pos)):
 		word = words[pos + i]
 		depth = len(word)
 
-		imem.copyto(ctx.mem)  # TODO: use set(other) instead
+		ctx.setmem(imem)  # TODO: use set(other) instead
 
 		for l in range(depth - 1):
 			a = ci[word[l]]
@@ -53,23 +52,18 @@ def do_batch(net, ctx, pos, batch_size):
 			# feedforward
 			net.transmit(ctx)
 			ctx.trace.copyto(trace_stack[l])
-			nn.array.copy(out_stack[l], dst)
 
-		ierr.copyto(ctx.err)
+		ctx.seterr(ierr)
 
 		for l in reversed(range(depth - 1)):
 			a = ci[word[l + 1]]
-			lres = [0.]*size
-			lres[a] = 1.
-			vres = np.array(lres)
-			vin = out_stack[l].get()
-			vout = np.exp(vin)/np.sum(np.exp(vin))  # softmax
-			dst.set(vout - vres)
-			loss += -np.log(vout[a])
+			ctx.nodes[8].target = a
 
 			# backpropagate
 			trace_stack[l].copyto(ctx.trace)
 			net.backprop(ctx)
+
+			loss += ctx.nodes[8].loss
 
 	# if i == 1 and l == depth - 2 - 0:
 	# print(ic[a])
@@ -97,7 +91,8 @@ net.addnodes([
 	nn.Tanh(shid, **opt),
 	nn.Fork(shid, **opt),
 	nn.Matrix(shid, size, **opt),
-	nn.Bias(size, **opt)
+	nn.Bias(size, **opt),
+	nn.SoftmaxLoss(size, **opt)
 ])
 
 net.connect([
@@ -110,13 +105,14 @@ net.connect([
 
 	nn.Path((5, 1), 1, mem=True),
 	nn.Path((5, 0), 6),
-	nn.Path(6, 7)
+	nn.Path(6, 7),
+	nn.Path(7, 8)
 ])
 
-net.order = [0, 1, 2, 3, 4, 5, 6, 7]
+net.order = [0, 1, 2, 3, 4, 5, 6, 7, 8]
 
 net.setinputs(0)
-net.setoutputs(7)
+net.setoutputs(8)
 
 context = net.newContext(factory)
 context.state = state = net.newState(factory)
@@ -137,8 +133,6 @@ for key in save:
 context.trace = net.newTrace(factory)
 context.grad = state.newGradient(factory)
 context.rate = state.newRate(factory, rate_factor, adagrad=True)
-context.mem = state.newMemory(factory)
-context.err = state.newError(factory)
 
 b = 0
 p = 0
