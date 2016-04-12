@@ -24,60 +24,41 @@ size = len(chars)
 factory = nn.array.newFactory()
 
 
-def do_batch(net, ctx, pos, batch_size):
-	loss = 0
-	ctx.grad.clear()
-	src = factory.empty(size)
-	dst = factory.empty(size)
+class Entry:
+	def __init__(self, ichar, ochar):
+		self.ichar = ichar
+		self.ochar = ochar
 
-	ctx.src = src
-	ctx.dst = dst
+	def getinput(self, buf):
+		nn.array.clear(buf)
+		buf.np[self.ichar] = 1.
 
-	imem = ctx.state.newMemory(factory)
-	ierr = ctx.state.newError(factory)
-	trace_stack = [net.newTrace(factory) for i in range(max_depth)]
+	def getouptut(self, buf):
+		nn.array.clear(buf)
+		buf.np[self.ochar] = 1.
 
-	for i in range(min(batch_size, len(words) - pos)):
-		word = words[pos + i]
-		depth = len(word)
 
-		ctx.setmem(imem)  # TODO: use set(other) instead
+class Series:
+	def __init__(self, word):
+		self.word = word
 
-		for l in range(depth - 1):
-			a = ci[word[l]]
-			lin = [0.]*size
-			lin[a] = 1.
-			src.set(np.array(lin))
+	def __getitem__(self, i):
+		return Entry(ci[self.word[i]], ci[self.word[i + 1]])
 
-			# feedforward
-			net.transmit(ctx)
-			ctx.trace.copyto(trace_stack[l])
+	def __len__(self):
+		return len(word) - 1
 
-		ctx.seterr(ierr)
 
-		for l in reversed(range(depth - 1)):
-			a = ci[word[l + 1]]
-			ctx.nodes[8].target = a
+def batch_gen():
+	for word in words:
+		yield Series(word)
 
-			# backpropagate
-			trace_stack[l].copyto(ctx.trace)
-			net.backprop(ctx)
-
-			loss += ctx.nodes[8].loss
-
-	# if i == 1 and l == depth - 2 - 0:
-	# print(ic[a])
-	# data = ctx.grad.nodes[0].data.get()
-	# print(data)
-	# print(np.sum((data - np.load('state/gradNM0.npy'))**2))
-	# exit()
-
-	ctx.grad.mul(1/batch_size)
-	return loss/batch_size
 
 shid = 200
 batch_size = 20
 rate_factor = 1e-1
+
+batch = nn.Batch(factory, batch_size, maxlen=max_depth)
 
 opt = {'prof': True}
 
@@ -109,10 +90,10 @@ net.connect([
 	nn.Path(7, 8)
 ])
 
-net.order = [0, 1, 2, 3, 4, 5, 6, 7, 8]
-
 net.setinputs(0)
 net.setoutputs(8)
+
+net.prepare()
 
 context = net.newContext(factory)
 context.state = state = net.newState(factory)
@@ -153,6 +134,7 @@ lstat = nn.Profiler()
 
 counter = 0
 show_period = 20
+gen = batch_gen()
 while not done:
 	if p >= len(words):
 		p = 0
@@ -162,7 +144,7 @@ while not done:
 		# shuffle(words)
 		pass
 
-	loss = do_batch(net, context, p, batch_size)
+	loss = batch.do(net, context, gen)
 	with lstat:
 		context.grad.clip(5e0)
 		context.rate.update(context.grad)
@@ -191,7 +173,8 @@ while not done:
 		stats = nn.array.stats
 		times = [v.time for v in stats.values()]
 		for v, k in reversed(sorted(zip(times, stats.keys()))):
-			print('%f ms: %s' % (1e3*v, k))
+			if v > 0.:
+				print('%f ms: %s' % (1e3*v, k))
 
 		exit()
 
