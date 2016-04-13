@@ -6,14 +6,10 @@ import pynn as nn
 import pynnui as ui
 
 
-bsize = 20
-
 data = open('20k.txt').read()
 words = []
 for word in data.split('\n'):
 	words.append(word + '\n')
-
-words = words[:20*bsize]
 
 maxlen = max([len(w) for w in words])
 
@@ -25,7 +21,7 @@ size = len(chars)
 
 # print(chars)
 
-
+bsize = 20
 shid = 200
 
 factory = nn.array.newFactory()
@@ -63,7 +59,7 @@ net.connect([
 net.setinputs(0)
 net.setoutputs(8)
 
-open('net.svg', 'w').write(ui.Graph(net).svg())
+# open('net.svg', 'w').write(ui.Graph(net).svg())
 
 onet = nn.Network(size, size)
 onet.addnodes(net)
@@ -131,11 +127,24 @@ class LearnData:
 
 
 learndata = LearnData(words)
-
 lstat = nn.Profiler()
 
+
+class Callback:
+	def __init__(self):
+		self.counter = 0
+
+	def __call__(self, ctx):
+		print(ctx.loss)
+		self.counter += 1
+		if self.counter == 20:
+			raise StopIteration
+
+batchinfo = nn.BatchInfo(bsize, Callback())
+teacher = nn.Teacher(factory, batchinfo, onet, state)
+
 with lstat:
-	nn.Teacher(factory, bsize, onet, state).epoch(learndata, maxlen)
+	teacher.epoch(learndata, maxlen)
 
 save = np.load('state/wordgen_batch_20_adagrad.npz')
 for key in save:
