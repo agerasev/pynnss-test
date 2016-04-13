@@ -1,8 +1,9 @@
 #!/usr/bin/python3
 
-import pynn as nn
-from random import shuffle
 import numpy as np
+from random import shuffle
+import pynn as nn
+import pynnui as ui
 
 
 bsize = 20
@@ -62,10 +63,15 @@ net.connect([
 net.setinputs(0)
 net.setoutputs(8)
 
-net.prepare()
+open('net.svg', 'w').write(ui.Graph(net).svg())
 
-context = net.newContext(factory)
-context.state = state = net.newState(factory)
+onet = nn.Network(size, size)
+onet.addnodes(net)
+onet.setinputs(0)
+onet.setoutputs(0)
+onet.prepare()
+
+state = onet.newState(factory)
 
 nmap = {
 	'Wxh': 0,
@@ -78,7 +84,7 @@ nmap = {
 save = np.load('state/wordgen.npz')
 
 for key in save:
-	state.nodes[nmap[key]].data.set(save[key])
+	state.nodes[0].nodes[nmap[key]].data.set(save[key])
 
 
 class Entry:
@@ -129,11 +135,11 @@ learndata = LearnData(words)
 lstat = nn.Profiler()
 
 with lstat:
-	nn.Teacher(factory, bsize, net, state).epoch(learndata, maxlen)
+	nn.Teacher(factory, bsize, onet, state).epoch(learndata, maxlen)
 
 save = np.load('state/wordgen_batch_20_adagrad.npz')
 for key in save:
-	print(np.sum((state.nodes[nmap[key]].data.get() - save[key])**2))
+	print(np.sum((state.nodes[0].nodes[nmap[key]].data.get() - save[key])**2))
 
 print('fnet: %f' % (1e3*net.fstat.time))
 tac = 0.

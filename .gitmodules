@@ -4,3 +4,6 @@
 [submodule "pynnorig"]
 	path = pynnorig
 	url = https://github.com/nthend/pynn.git
+[submodule "pynnui"]
+	path = pynnui
+	url = https://github.com/nthend/pynnui.git
