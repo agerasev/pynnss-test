@@ -105,28 +105,30 @@ class Word:
 		return Entry(ci[self.word[i]], ci[self.word[i + 1]])
 
 	def __len__(self):
-		return len(word) - 1
+		return len(self.word) - 1
 
 
-class LearnData:
-	def __init__(self, words):
-		self.words = words
-
-	def __shuffle__(self):
-		shuffle(self.words)
-
-	def _word_gen(self):
-		for word in words:
-			yield Word(word)
-
-	def __iter__(self):
-		return self._word_gen()
-
-	def __len__(self):
-		return len(self.words)
+def BGen(data, bsize):
+	diter = iter(data)
+	while True:
+		batch = []
+		try:
+			for _ in range(bsize):
+				batch.append(Word(next(diter)))
+		except StopIteration:
+			pass
+		if len(batch) == 0:
+			break
+		yield batch
 
 
-learndata = LearnData(words)
+def EGen(data):
+	while True:
+		yield BGen(data, 20)
+		shuffle(data)
+
+egen = EGen(words)
+
 lstat = nn.Profiler()
 
 
@@ -140,13 +142,17 @@ class Callback:
 		if self.counter == 20:
 			raise StopIteration
 
-batchinfo = nn.BatchInfo(bsize, Callback())
-teacher = nn.Teacher(factory, batchinfo, onet, state)
+teacher = nn.Teacher(
+	factory, egen, onet, state,
+	adagrad=True, rate=1e-1, clip=5,
+	maxlen=maxlen, bmon=Callback()
+)
 
 with lstat:
-	teacher.epoch(learndata, maxlen)
+	teacher.teach()
 
 save = np.load('state/wordgen_batch_20_adagrad.npz')
+print('weight diff:')
 for key in save:
 	print(np.sum((state.nodes[0].nodes[nmap[key]].data.get() - save[key])**2))
 
@@ -162,7 +168,7 @@ for n in net.nodes:
 	tac += n.bstat.time
 print(' bnodes: %f ms' % (1e3*tac))
 
-print('batch: %f ms' % (1e3*lstat.time))
+print('total: %f ms' % (1e3*lstat.time))
 
 stats = nn.array.stats
 times = [v.time for v in stats.values()]
