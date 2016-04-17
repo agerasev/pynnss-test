@@ -131,6 +131,8 @@ egen = EGen(words)
 
 lstat = nn.Profiler()
 
+testlen = 20
+
 
 class Callback:
 	def __init__(self):
@@ -139,7 +141,7 @@ class Callback:
 	def __call__(self, ctx):
 		print(ctx.loss)
 		self.counter += 1
-		if self.counter == 20:
+		if self.counter == testlen:
 			raise StopIteration
 
 teacher = nn.Teacher(
@@ -149,7 +151,7 @@ teacher = nn.Teacher(
 )
 
 with lstat:
-	teacher.teach()
+	ctx = teacher.teach()
 
 save = np.load('state/wordgen_batch_20_adagrad.npz')
 print('weight diff:')
@@ -175,3 +177,24 @@ times = [v.time for v in stats.values()]
 for v, k in reversed(sorted(zip(times, stats.keys()))):
 	if v > 0.:
 		print('%f ms: %s' % (1e3*v, k))
+
+
+alphabet = 'abcdefghijklmnopqrstuvwxyz'
+feeder = nn.Feeder(factory, onet, ctx.state)
+
+for ch in alphabet:
+
+	a = ci[ch]
+	print(ch, end='')
+	feed = feeder.feed()
+
+	for i in range(0x40):
+		Entry(a, 0).getinput(feeder.src)
+		next(feed)
+		a = np.random.choice(range(size), p=feeder.dst.get())
+		ch = ic[a]
+
+		if ch == '\n':
+			break
+		print(ch, end='')
+	print()
